@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/aws/aws-sdk-go-v2/config v1.15.14
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.12.8
+	github.com/aws/aws-sdk-go-v2/service/comprehend v1.18.3
 )
 
 require (
