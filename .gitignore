@@ -15,4 +15,4 @@
 # vendor/
 
 # User files
-./credentials/credentials
+credentials/credentials
