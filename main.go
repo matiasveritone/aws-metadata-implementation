@@ -2,23 +2,27 @@ package main
 
 import (
 	"context"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"github.com/aws/aws-sdk-go-v2/service/comprehend"
+	"log"
 )
-import "log"
-import "github.com/aws/aws-sdk-go-v2/config"
 
 func main() {
-	// defining context
+	log.Printf("Starting process")
+
+	// defining context and parameters
 	ctx := context.TODO()
-	checkAWSmachine := true
-	region := config.WithRegion(
-		"us-east-1",
+	isAWSAccount := true
+	region := "us-east-1"
+	regionConfig := config.WithRegion(
+		region,
 	)
 
-	// checking if metadata exists
-	if checkAWSmachine {
-		log.Printf("Checking for metadata of AWS EC2.")
+	// checking if we are on AWS EC2 before using AWS Account credentials
+	if isAWSAccount {
+		log.Printf("Checking for AWS Account inside of AWS EC2 environment.")
 
 		// creating metadata client
 		err := startMetadataClient(ctx)
@@ -30,7 +34,7 @@ func main() {
 	}
 
 	// starting AWS Comprehend client
-	clientComprehend, err := startComprehendClient(ctx, checkAWSmachine, region)
+	clientComprehend, err := startComprehendClient(ctx, isAWSAccount, regionConfig)
 	if err != nil {
 		log.Printf("ERROR: Unable to create AWS Comprehend Client: %s\n", err)
 		return
@@ -38,19 +42,19 @@ func main() {
 
 	// executing API
 	// create parameters for DetectDominantLanguage API
-	text := "English as dominant language"
+	textSample := "This is just a test with English as dominant language"
 
 	detectDominantLanguageInput := comprehend.DetectDominantLanguageInput{
-		Text: &text,
+		Text: &textSample,
 	}
 
 	_, err = clientComprehend.DetectDominantLanguage(ctx, &detectDominantLanguageInput)
 	if err != nil {
 		log.Printf("ERROR: Something failed while running aws API. %v", err)
 		return
+	} else {
+		log.Printf("Everything worked fine, connection was successful. ")
 	}
-
-	log.Printf("Everything worked fine. ")
 }
 
 func startMetadataClient(ctx context.Context) error {
@@ -67,6 +71,7 @@ func startMetadataClient(ctx context.Context) error {
 	clientMetadata := imds.NewFromConfig(cfg)
 
 	// checking for local EC2 instance name
+	log.Printf("Checking for metadata info (only works inside AWS EC2 Environment).")
 	instanceId, err := clientMetadata.GetMetadata(ctx, &imds.GetMetadataInput{
 		Path: "instance-id",
 	})
@@ -81,61 +86,59 @@ func startMetadataClient(ctx context.Context) error {
 
 }
 
+// startComprehendClient defines whether we create the client using a credentials file
+// or checking if we are in an AWS EC2 environment that uses a AWS Account
 func startComprehendClient(ctx context.Context, metadata bool, region config.LoadOptionsFunc) (comprehend.Client, error) {
+	var err error
+	var cfg aws.Config
 	var client *comprehend.Client
-
-	// checking if custom credentials exist
 	var credsConfig config.LoadOptionsFunc
 
-	// loading creds if not in metadata
+	// creating client
 	if !metadata {
 		log.Printf("Creating AWS Comprehend Client with credentials file.")
 
+		// when not in EC2 environment, a file with correspondant credentials is used
 		credsConfig = config.WithSharedCredentialsFiles(
 			[]string{"./credentials/credentials"},
 		)
 
-		// Load the Shared AWS Configuration and Credentials
-		cfg, err := config.LoadDefaultConfig(ctx,
+		// load the Shared AWS Configuration and credentials
+		cfg, err = config.LoadDefaultConfig(ctx,
 			credsConfig,
 			region,
 		)
 		if err != nil {
-			log.Printf("Error: failed to load configuration, %v\n", err)
+			log.Printf("ERROR: failed to load configuration with custom credentials, %v\n", err)
 			return comprehend.Client{}, err
 		} else {
 			log.Println("AWS Client configuration loaded successfully")
 		}
 
-		// Using the Config value, to create Comprehend client
-		client = comprehend.NewFromConfig(cfg)
-		if err != nil {
-			log.Printf("Error: failed to create client, %v\n", err)
-			return *client, err
-		}
-
 	} else {
-		log.Printf("Creating AWS Comprehend Client with metadata.")
+		log.Printf("Creating AWS Comprehend Client with AWS Account inside EC2 environment.")
 
 		// basic config for EC2 metadata
-		cfg, err := config.LoadDefaultConfig(
+		cfg, err = config.LoadDefaultConfig(
 			ctx,
 			region,
 		)
 		if err != nil {
-			log.Printf("ERROR: loading config failed: %v", err)
+			log.Printf("ERROR: failed to load configuration within AWS EC2 environment: %v", err)
 			return comprehend.Client{}, err
-		}
-
-		// Using the Config value, to create Comprehend client
-		client = comprehend.NewFromConfig(cfg)
-		if err != nil {
-			log.Printf("Error: failed to create client, %v\n", err)
-			return *client, err
+		} else {
+			log.Println("AWS Comprehend Client configuration loaded successfully")
 		}
 
 	}
 
-	return *client, nil
-
+	// Using the respective config value to create Comprehend client
+	client = comprehend.NewFromConfig(cfg)
+	if err != nil {
+		log.Printf("ERROR: failed to create comprehend client, %v\n", err)
+		return comprehend.Client{}, err
+	} else {
+		log.Printf("AWS Comprehend client created successfully")
+		return *client, nil
+	}
 }
