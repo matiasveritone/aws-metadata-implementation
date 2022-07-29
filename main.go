@@ -12,6 +12,9 @@ func main() {
 	// defining context
 	ctx := context.TODO()
 	checkAWSmachine := true
+	region := config.WithRegion(
+		"us-east-1",
+	)
 
 	// checking if metadata exists
 	if checkAWSmachine {
@@ -27,7 +30,7 @@ func main() {
 	}
 
 	// starting AWS Comprehend client
-	clientComprehend, err := startComprehendClient(ctx, checkAWSmachine)
+	clientComprehend, err := startComprehendClient(ctx, checkAWSmachine, region)
 	if err != nil {
 		log.Printf("ERROR: Unable to create AWS Comprehend Client: %s\n", err)
 		return
@@ -78,7 +81,7 @@ func startMetadataClient(ctx context.Context) error {
 
 }
 
-func startComprehendClient(ctx context.Context, metadata bool) (comprehend.Client, error) {
+func startComprehendClient(ctx context.Context, metadata bool, region config.LoadOptionsFunc) (comprehend.Client, error) {
 	var client *comprehend.Client
 
 	// checking if custom credentials exist
@@ -95,9 +98,8 @@ func startComprehendClient(ctx context.Context, metadata bool) (comprehend.Clien
 		// Load the Shared AWS Configuration and Credentials
 		cfg, err := config.LoadDefaultConfig(ctx,
 			credsConfig,
-			config.WithRegion(
-				"us-east-1",
-			))
+			region,
+		)
 		if err != nil {
 			log.Printf("Error: failed to load configuration, %v\n", err)
 			return comprehend.Client{}, err
@@ -116,7 +118,10 @@ func startComprehendClient(ctx context.Context, metadata bool) (comprehend.Clien
 		log.Printf("Creating AWS Comprehend Client with metadata.")
 
 		// basic config for EC2 metadata
-		cfg, err := config.LoadDefaultConfig(context.TODO())
+		cfg, err := config.LoadDefaultConfig(
+			ctx,
+			region,
+		)
 		if err != nil {
 			log.Printf("ERROR: loading config failed: %v", err)
 			return comprehend.Client{}, err
